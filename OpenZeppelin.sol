@@ -7,6 +7,8 @@ pragma solidity ^0.8.20;
 // 2. Flexible role-based permissioning scheme.
 // 3. Reusable Solidity components to build custom contracts and complex decentralized systems.
 
+// Deploy using injected provider (Metamask etc.) in Remix IDE.
+
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract Block is ERC20 {

@@ -61,7 +61,7 @@ contract Block is ERC20Interface {
     function transfer(
         address to,
         uint tokens
-    ) public override returns (bool success) {
+    ) public virtual override returns (bool success) {
         require(balances[msg.sender] >= tokens && tokens > 0);
         balances[to] += tokens;
         balances[msg.sender] -= tokens;
@@ -94,7 +94,7 @@ contract Block is ERC20Interface {
         address from,
         address to,
         uint tokens
-    ) public override returns (bool success) {
+    ) public virtual override returns (bool success) {
         require(allowed[from][to] >= tokens);
         require(balances[from] >= tokens);
         balances[from] -= tokens;
@@ -102,5 +102,113 @@ contract Block is ERC20Interface {
         allowed[from][to] -= tokens;
         emit Transfer(from, to, tokens);
         return true;
+    }
+}
+
+contract ICO is Block {
+    address public manager;
+    // Address at which the investors will deposit their ethers
+    address payable public deposit;
+
+    uint tokenPrice = 0.1 ether; // Price of each token in ethers
+    uint public cap = 300 ether; // Maximum no of ethers to be raised
+    uint public raisedAmount; // Amount of ethers raised
+    uint public icoStart = block.timestamp;
+    uint public icoEnd = icoStart + 3600; // ICO will run for 1 hour (in seconds)
+    uint public tokenTradeTime = icoEnd + 3600; // Tokens can be traded 1 hour after the ICO ends
+    uint public minInvestment = 0.1 ether; // Minimum investment required
+    uint public maxInvestment = 10 ether; // Maximum investment allowed
+    enum State {
+        beforeStart,
+        afterEnd,
+        running,
+        halted
+    } // State of the ICO
+    State public icoState; // Current state of the ICO
+    event Invest(address investor, uint value, uint tokens);
+
+    constructor(address payable _deposit) {
+        deposit = _deposit;
+        manager = msg.sender;
+        icoState = State.beforeStart;
+    }
+
+    modifier onlyManager() {
+        require(msg.sender == manager);
+        _;
+    }
+
+    function halt() public onlyManager {
+        icoState = State.halted;
+    }
+
+    function resume() public onlyManager {
+        icoState = State.running;
+    }
+
+    function changeDepositAddress(
+        address payable newDeposit
+    ) public onlyManager {
+        deposit = newDeposit;
+    }
+
+    function getState() public view returns (State) {
+        if (icoState == State.halted) {
+            return State.halted;
+        } else if (block.timestamp < icoStart) {
+            return State.beforeStart;
+        } else if (block.timestamp >= icoStart && block.timestamp <= icoEnd) {
+            return State.running;
+        } else {
+            return State.afterEnd;
+        }
+    }
+
+    function invest() public payable returns (bool) {
+        icoState = getState();
+        require(icoState == State.running);
+        require(msg.value >= minInvestment && msg.value <= maxInvestment);
+        raisedAmount += msg.value;
+        require(raisedAmount <= cap);
+        uint tokens = msg.value / tokenPrice;
+        balances[msg.sender] += tokens;
+        balances[founder] -= tokens; // Coming from block contract
+        deposit.transfer(msg.value);
+        emit Invest(msg.sender, msg.value, tokens);
+        return true;
+    }
+
+    // Burning the tokens is done to effectively reduce the total supply of the token. This is done to increase the value or the demand of the token.
+    function burn() public returns (bool) {
+        icoState = getState();
+        require(icoState == State.afterEnd);
+        balances[founder] = 0;
+        return true;
+    }
+
+    // This function is used to transfer the tokens after the ICO ends. This function is overridden from the block contract.
+    function transfer(
+        address to,
+        uint tokens
+    ) public override returns (bool success) {
+        require(block.timestamp > tokenTradeTime);
+        // Calling the transfer function of the parent contract ie the block contract
+        super.transfer(to, tokens); // You can also use Block.transfer(to, tokens);
+        return true;
+    }
+
+    function transferFrom(
+        address from,
+        address to,
+        uint tokens
+    ) public override returns (bool success) {
+        require(block.timestamp > tokenTradeTime);
+        Block.transferFrom(from, to, tokens);
+        return true;
+    }
+
+    // If the investor is unaware of the invest() function and sends ethers directly to the contract address, all hisethers will be lost. So the fallback function will be called that will call the invest() function.
+    receive() external payable {
+        invest();
     }
 }
