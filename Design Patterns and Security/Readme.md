@@ -87,3 +87,32 @@ By storing Ether within the contract, the control is shifted from the sender to 
 
 ### Name Registry
 Imagine you are building a DApp which has a dependency on multiple contracts, for example a blockchain copy of Amazon store, which makes use of ClothesFactoryContract, GamesFactoryContract, BooksFactoryContract, etc.. Now imagine keeping all those addresses inside your app’s code. What if those addresses change over time or even more annoying, while developing you are deploying all those contracts every time you make changes and you have to keep track of their addresses. This is where Name Registry comes into play. This pattern allows you to only keep the address of one contract, instead of tens, hundreds or even thousands, as your DApp grows in scale. It works by storing a mapping contract name => contract address. The benefit of storing names mapped to addresses is that with the introduction of new versions of some contracts the DApp will not be affected in any way since the only thing we modify is just the address of the mapping.
+
+## Re-entrancy Attack
+Reentrancy attack in solidity repeatedly withdraws funds from the smart contract and transfers them.
+
+#### Problematic Code
+As soon as transfer is executed, the fallback function of the receiver is called because we are changing the state of the smart contract but not calling any function of the smart contract.
+
+Now, the fallback function of the receiver can call the requestEther function again before the balance of the receiver is updated. This can be done recursively and the receiver can drain the balance of the smart contract. This is called re-entrancy attack.
+```
+function requestEther(){
+    address.transfer(balance);
+    balance[address] = 0;
+}
+```
+#### Attackers Code
+```
+fallback external payable {
+    requestEther();
+}
+```
+#### Solution Code
+We can update the balance of the receiver before transferring the ether.
+```
+function requestEther(){
+    uint temp = balance[address];
+    balance[address] = 0;
+    address.transfer(temp);
+}
+```
